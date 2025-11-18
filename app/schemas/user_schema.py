@@ -4,6 +4,11 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
 
+class ForgetPassword(BaseModel):
+    email: EmailStr
+    new_password: str
+    confirmPassword: str
+
 class UserResponse(BaseModel):
     id: int
     email: EmailStr
