@@ -98,3 +98,30 @@ def google_signup(user: GoogleUserCreate, db: Session = Depends(get_db)):
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/google-signin", response_model=UserResponse)
+def google_signin(user: GoogleUserCreate, db: Session = Depends(get_db)):
+    try:
+        # Verify the Firebase ID token
+        decoded_token = firebase_auth.verify_id_token(user.token)
+        if decoded_token["uid"] != user.uid:
+            raise HTTPException(status_code=400, detail="UID mismatch")
+
+        # Check if user exists
+        existing_user = get_user_by_email_query(db, user.email)
+        if not existing_user:
+            raise HTTPException(status_code=404, detail="User not found. Please sign up first.")
+
+        # Optionally, you can update last login timestamp
+        # existing_user.last_login = datetime.utcnow()
+        # db.commit()
+
+        return existing_user
+
+    except firebase_auth.InvalidIdTokenError:
+        raise HTTPException(status_code=401, detail="Invalid Firebase token")
+    except firebase_auth.ExpiredIdTokenError:
+        raise HTTPException(status_code=401, detail="Expired Firebase token")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
