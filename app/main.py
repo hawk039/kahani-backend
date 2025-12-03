@@ -2,7 +2,7 @@ import traceback
 from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse
 
-from app.routes import auth
+from app.routes import auth, generate_story
 from app.db.database import Base, engine
 
 # Create tables
@@ -20,6 +20,7 @@ app = FastAPI()
 
 # Include routers
 app.include_router(auth.router)
+app.include_router(generate_story.router)
 
 
 # Global exception handler
