@@ -1,17 +1,28 @@
 from fastapi import APIRouter, Depends, HTTPException
 from requests import Session
+from pydantic import BaseModel
 
 from app.db.database import SessionLocal
 from app.schemas.user_schema import UserCreate, UserResponse, ForgetPassword
-from app.core.security import verify_password, create_access_token, hash_password, get_current_user, oauth2_scheme
+from app.core.security import (
+    verify_password,
+    create_access_token,
+    hash_password,
+    get_current_user,
+    oauth2_scheme,
+)
 from app.services.token_blacklist_service import blacklist_token
-from pydantic import BaseModel
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 
-from app.services.user_queries import get_user_by_email_query, create_user_query, create_user_with_google_query
+from app.services.user_queries import (
+    get_user_by_email_query,
+    create_user_query,
+    create_user_with_google_query,
+)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
 
 def get_db():
     db = SessionLocal()
@@ -21,15 +32,27 @@ def get_db():
         db.close()
 
 
+class SignUpResponse(BaseModel):
+    user: UserResponse
+    access_token: str
+
+
 # -------------------------
 # Normal email/password signup
 # -------------------------
-@router.post("/signup", response_model=UserResponse)
+@router.post("/signup", response_model=SignUpResponse)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
     existing = get_user_by_email_query(db, user.email)
     if existing:
         raise HTTPException(status_code=400, detail="Email already exists")
-    return create_user_query(db, user)
+
+    # Create the user
+    new_user = create_user_query(db, user)
+
+    # Generate a token for the new user
+    token = create_access_token({"sub": new_user.email})
+
+    return {"user": new_user, "access_token": token}
 
 
 # -------------------------
@@ -66,7 +89,7 @@ def fpassword(payload: ForgetPassword, db: Session = Depends(get_db)):
 def logout(
     token: str = Depends(oauth2_scheme),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     blacklist_token(db, token)
     return {"message": "Logged out successfully"}
@@ -79,6 +102,7 @@ class GoogleUserCreate(BaseModel):
     uid: str
     email: str
     token: str
+
 
 @router.post("/google-signup", response_model=UserResponse)
 def google_signup(user: GoogleUserCreate, db: Session = Depends(get_db)):
@@ -111,7 +135,9 @@ def google_signin(user: GoogleUserCreate, db: Session = Depends(get_db)):
         # Check if user exists
         existing_user = get_user_by_email_query(db, user.email)
         if not existing_user:
-            raise HTTPException(status_code=404, detail="User not found. Please sign up first.")
+            raise HTTPException(
+                status_code=404, detail="User not found. Please sign up first."
+            )
 
         # Optionally, you can update last login timestamp
         # existing_user.last_login = datetime.utcnow()
