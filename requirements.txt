@@ -4,10 +4,11 @@ SQLAlchemy==2.0.31
 psycopg2-binary==2.9.9
 alembic==1.13.2
 pydantic==2.8.2
-email-validator==2.2.0 # Added for email validation
+email-validator==2.2.0
 passlib==1.7.4
 python-jose[cryptography]==3.3.0
 bcrypt==4.1.3
 python-multipart==0.0.9
 firebase-admin==6.5.0
 gunicorn==22.0.0
+python-dotenv==1.0.1 # For loading .env files

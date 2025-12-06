@@ -1,14 +1,18 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from a .env file at the project root
+load_dotenv()
 
 # --- PostgreSQL Configuration ---
-# Replace with your actual Neon connection string
-# It's best practice to load this from an environment variable
-# Example: postgresql://user:password@host:port/dbname
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@host:port/dbname")
+# The DATABASE_URL is now loaded from the .env file
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# The `connect_args` for SQLite is not needed for PostgreSQL
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable not set. Please create a .env file.")
+
 engine = create_engine(DATABASE_URL)
 
 SessionLocal = sessionmaker(
