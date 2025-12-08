@@ -24,6 +24,7 @@ from app.services.user_queries import (
     create_user_with_google_query,
 )
 
+
 # Custom APIRoute class to handle exceptions for this router only
 class AuthRoute(APIRoute):
     def get_route_handler(self) -> Callable:
@@ -40,12 +41,14 @@ class AuthRoute(APIRoute):
 
         return custom_route_handler
 
+
 # Use the custom route class in the router
 router = APIRouter(
     prefix="/auth",
     tags=["Auth"],
     route_class=AuthRoute
 )
+
 
 def get_db():
     db = SessionLocal()
@@ -86,7 +89,7 @@ def login(user: UserCreate, db: Session = Depends(get_db)):
     db_user = get_user_by_email_query(db, user.email)
     if not db_user or not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=400, detail="Invalid credentials")
-    
+
     token = create_access_token({"sub": user.email})
     return {"statusCode": 200, "access_token": token}
 
@@ -112,16 +115,16 @@ def fpassword(payload: ForgetPassword, db: Session = Depends(get_db)):
 # -------------------------
 @router.post("/logout")
 def logout(
-    token: str = Depends(oauth2_scheme),
-    current_user=Depends(get_current_user),
-    db: Session = Depends(get_db),
+        token: str = Depends(oauth2_scheme),
+        current_user=Depends(get_current_user),
+        db: Session = Depends(get_db),
 ):
     blacklist_token(db, token)
     return {"statusCode": 200, "message": "Logged out successfully"}
 
 
 # -------------------------
-# Google Sign-Up & Sign-In
+# Google Authentication
 # -------------------------
 class GoogleUserCreate(BaseModel):
     uid: str
@@ -129,8 +132,34 @@ class GoogleUserCreate(BaseModel):
     token: str
 
 
-@router.post("/google-auth")
-def google_auth(user: GoogleUserCreate, db: Session = Depends(get_db)):
+@router.post("/google-signup", response_model=SignUpResponse)
+def google_signup(user: GoogleUserCreate, db: Session = Depends(get_db)):
+    try:
+        decoded_token = firebase_auth.verify_id_token(user.token)
+        if decoded_token["uid"] != user.uid:
+            raise HTTPException(status_code=400, detail="UID mismatch")
+
+        if get_user_by_email_query(db, user.email):
+            raise HTTPException(status_code=400, detail="Email already exists")
+
+        new_user = create_user_with_google_query(db, user)
+        token = create_access_token({"sub": new_user.email})
+        return {
+            "statusCode": 200,
+            "user": new_user,
+            "access_token": token,
+        }
+
+    except firebase_auth.ExpiredIdTokenError:
+        raise HTTPException(status_code=401, detail="Expired Firebase token")
+    except firebase_auth.InvalidIdTokenError:
+        raise HTTPException(status_code=401, detail="Invalid Firebase token")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/google-signin")
+def google_signin(user: GoogleUserCreate, db: Session = Depends(get_db)):
     try:
         decoded_token = firebase_auth.verify_id_token(user.token)
         if decoded_token["uid"] != user.uid:
@@ -138,24 +167,14 @@ def google_auth(user: GoogleUserCreate, db: Session = Depends(get_db)):
 
         existing_user = get_user_by_email_query(db, user.email)
         if not existing_user:
-            new_user = create_user_with_google_query(db, user)
-            token = create_access_token({"sub": new_user.email})
-            return {
-                "statusCode": 200,
-                "user": new_user,
-                "access_token": token,
-            }
-        else:
-            token = create_access_token({"sub": existing_user.email})
-            return {
-                "statusCode": 200,
-                "user": existing_user,
-                "access_token": token,
-            }
+            raise HTTPException(status_code=404, detail="User not found. Please sign up first.")
 
-    except firebase_auth.InvalidIdTokenError:
-        raise HTTPException(status_code=401, detail="Invalid Firebase token")
+        token = create_access_token({"sub": existing_user.email})
+        return {"statusCode": 200, "access_token": token}
+
     except firebase_auth.ExpiredIdTokenError:
         raise HTTPException(status_code=401, detail="Expired Firebase token")
+    except firebase_auth.InvalidIdTokenError:
+        raise HTTPException(status_code=401, detail="Invalid Firebase token")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
