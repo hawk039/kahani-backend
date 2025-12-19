@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from typing import Dict
+
 from app.db.database import SessionLocal
-from app.schemas.story_schema import StoryMetadata
 from app.core.security import get_current_user
 from app.schemas.user_schema import UserResponse
-
-# We will create these modules in the next steps
-# from app.services.image_service import save_image_to_db
-# from app.schemas.image_schema import ImageResponse
+from app.core.validators import validate_story_input
+from app.services.story_generator_service import (
+    create_story_prompt,
+    generate_story_from_image_and_prompt,
+)
 
 router = APIRouter(prefix="/generate-story", tags=["Generate Story"])
 
@@ -20,28 +22,37 @@ def get_db():
         db.close()
 
 
-@router.post("/upload-image")
-async def upload_image(
-    file: UploadFile = File(...),
+@router.post("/generate")
+async def generate_story_endpoint(
+    validated_data: Dict = Depends(validate_story_input),
     db: Session = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
-    Receives an image, saves it to the database.
+    Receives an image and story metadata, validates them,
+    creates a prompt, and returns a generated story.
     """
-    # Placeholder for the actual implementation
-    # image = save_image_to_db(db, file)
-    # return image
-    return {"filename": file.filename, "content_type": file.content_type, "user": current_user.email}
+    # 1. Data is already validated by the `validate_story_input` dependency.
+    file = validated_data["file"]
+    genre = validated_data["genre"]
+    tone = validated_data["tone"]
+    language = validated_data["language"]
 
+    # 2. Create the prompt using the service
+    prompt = create_story_prompt(genre, tone, language)
 
-@router.post("/metadata")
-async def receive_metadata(
-    metadata: StoryMetadata,
-    current_user: UserResponse = Depends(get_current_user)
-):
-    """
-    Receives story metadata (genre and tone).
-    """
-    # For now, just return the received data
-    return {"genre": metadata.genre, "tone": metadata.tone, "user": current_user.email}
+    # 3. Generate the story using the service (currently mocked)
+    story = await generate_story_from_image_and_prompt(file, prompt)
+
+    # 4. Return the final result
+    return {
+        "statusCode": 200,
+        "story": story,
+        "metadata": {
+            "genre": genre,
+            "tone": tone,
+            "language": language,
+            "filename": file.filename,
+        },
+        "user": current_user.email
+    }
