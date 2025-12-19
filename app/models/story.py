@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from app.db.database import Base
+from app.db.base_class import Base # Updated import
 
 class Story(Base):
     __tablename__ = "stories"
@@ -12,7 +12,7 @@ class Story(Base):
     genre = Column(String, nullable=False)
     tone = Column(String, nullable=False)
     language = Column(String, nullable=False)
-    image_filename = Column(String, nullable=True) # Added to store the filename
+    image_filename = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationship to User
