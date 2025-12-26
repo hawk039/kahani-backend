@@ -1,4 +1,4 @@
-from fastapi import UploadFile, HTTPException
+from fastapi import HTTPException
 import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
 import os
@@ -17,7 +17,6 @@ if not GEMINI_API_KEY:
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Initialize the Gemini model
-# Using the alias 'gemini-flash-latest' to ensure we get a valid model version
 model = genai.GenerativeModel('gemini-flash-latest')
 
 def create_story_prompt(genre: str, tone: str, language: str) -> str:
@@ -32,18 +31,15 @@ def create_story_prompt(genre: str, tone: str, language: str) -> str:
     )
     return prompt
 
-async def generate_story_from_image_and_prompt(
-    file: UploadFile, 
+async def generate_story_from_image_bytes_and_prompt(
+    image_bytes: bytes, 
     prompt: str
 ) -> str:
     """
-    Processes an image, sends it to the Gemini API with a prompt,
+    Processes image bytes, sends it to the Gemini API with a prompt,
     and returns the generated story. Handles rate limits with retries.
     """
     try:
-        # Read the image file
-        image_bytes = await file.read()
-        
         # Open the image using Pillow to ensure it's a valid image
         try:
             img = Image.open(io.BytesIO(image_bytes))

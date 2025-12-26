@@ -9,9 +9,10 @@ from app.schemas.user_schema import UserResponse
 from app.core.validators import validate_story_input
 from app.services.story_generator_service import (
     create_story_prompt,
-    generate_story_from_image_and_prompt,
+    generate_story_from_image_bytes_and_prompt, # Updated import
 )
-from app.models.story import Story # Import the Story model
+from app.core.s3_service import upload_file_bytes_to_s3 # Updated import
+from app.models.story import Story
 
 router = APIRouter(prefix="/generate-story", tags=["Generate Story"])
 
@@ -32,8 +33,8 @@ async def generate_story_endpoint(
 ):
     """
     Receives an image and story metadata, validates them,
-    creates a prompt, generates a story, saves it to the DB,
-    and returns the saved record.
+    uploads the image to S3, creates a prompt, generates a story, 
+    saves it to the DB, and returns the saved record with the S3 URL.
     """
     # 1. Data is already validated by the `validate_story_input` dependency.
     file = validated_data["file"]
@@ -41,26 +42,32 @@ async def generate_story_endpoint(
     tone = validated_data["tone"]
     language = validated_data["language"]
 
-    # 2. Create the prompt using the service
+    # READ THE FILE ONCE INTO MEMORY
+    file_bytes = await file.read()
+
+    # 2. Upload image to S3 using the bytes
+    image_url = await upload_file_bytes_to_s3(file_bytes, file.filename, file.content_type)
+
+    # 3. Create the prompt using the service
     prompt = create_story_prompt(genre, tone, language)
 
-    # 3. Generate the story using the service
-    story_text = await generate_story_from_image_and_prompt(file, prompt)
+    # 4. Generate the story using the service using the bytes
+    story_text = await generate_story_from_image_bytes_and_prompt(file_bytes, prompt)
 
-    # 4. Save to Database
+    # 5. Save to Database
     new_story = Story(
         user_id=current_user.id,
         content=story_text,
         genre=genre,
         tone=tone,
         language=language,
-        image_filename=file.filename
+        image_filename=image_url # Storing the full S3 URL here
     )
     db.add(new_story)
     db.commit()
     db.refresh(new_story)
 
-    # 5. Return the final result
+    # 6. Return the final result
     return {
         "statusCode": 200,
         "id": new_story.id,
@@ -70,7 +77,7 @@ async def generate_story_endpoint(
             "genre": new_story.genre,
             "tone": new_story.tone,
             "language": new_story.language,
-            "filename": new_story.image_filename,
+            "image_url": new_story.image_filename,
         },
         "user": current_user.email
     }
