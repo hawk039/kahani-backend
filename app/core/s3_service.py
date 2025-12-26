@@ -46,7 +46,7 @@ async def upload_file_bytes_to_s3(file_bytes: bytes, filename: str, content_type
             unique_filename,
             ExtraArgs={
                 "ContentType": content_type,
-                # "ACL": "public-read" 
+                "ACL": "public-read" # This makes the file publicly accessible
             }
         )
         
