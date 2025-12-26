@@ -13,7 +13,12 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable not set. Please create a .env file.")
 
-engine = create_engine(DATABASE_URL)
+# Create the engine with connection pooling options
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,  # Check if connection is alive before using it
+    pool_recycle=1800    # Recycle connections every 30 minutes
+)
 
 SessionLocal = sessionmaker(
     autocommit=False,
