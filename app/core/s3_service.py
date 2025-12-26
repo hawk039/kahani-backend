@@ -1,5 +1,6 @@
 import boto3
 from botocore.exceptions import NoCredentialsError
+from botocore.config import Config
 import os
 from fastapi import HTTPException
 import uuid
@@ -13,7 +14,7 @@ S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 
 def get_s3_client():
     """
-    Creates and returns a boto3 S3 client.
+    Creates and returns a boto3 S3 client with s3v4 signature.
     """
     if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY:
         raise ValueError("AWS credentials not found in environment variables.")
@@ -22,7 +23,8 @@ def get_s3_client():
         's3',
         aws_access_key_id=AWS_ACCESS_KEY_ID,
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-        region_name=AWS_REGION
+        region_name=AWS_REGION,
+        config=Config(signature_version='s3v4')
     )
 
 async def upload_file_bytes_to_s3(file_bytes: bytes, filename: str, content_type: str) -> str:
@@ -46,7 +48,7 @@ async def upload_file_bytes_to_s3(file_bytes: bytes, filename: str, content_type
             unique_filename,
             ExtraArgs={
                 "ContentType": content_type,
-                "ACL": "public-read" # This makes the file publicly accessible
+                "ACL": "public-read" 
             }
         )
         
