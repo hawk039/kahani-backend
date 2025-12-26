@@ -5,6 +5,10 @@ import os
 from fastapi import HTTPException
 import uuid
 import io
+from dotenv import load_dotenv # Import load_dotenv
+
+# Explicitly load environment variables at the start of this module
+load_dotenv()
 
 # Load environment variables
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
@@ -52,7 +56,7 @@ async def upload_file_bytes_to_s3(file_bytes: bytes, filename: str, content_type
             }
         )
         
-        # Construct the public URL
+        # Construct the public URL using the configured region
         file_url = f"https://{S3_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{unique_filename}"
         return file_url
 
