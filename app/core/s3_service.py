@@ -5,9 +5,9 @@ import os
 from fastapi import HTTPException
 import uuid
 import io
-from dotenv import load_dotenv # Import load_dotenv
+from dotenv import load_dotenv
 
-# Explicitly load environment variables at the start of this module
+# Explicitly load environment variables
 load_dotenv()
 
 # Load environment variables
@@ -15,6 +15,12 @@ AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+
+# DEBUG PRINT
+print(f"--- S3 CONFIG DEBUG ---")
+print(f"AWS_REGION loaded as: {AWS_REGION}")
+print(f"S3_BUCKET_NAME loaded as: {S3_BUCKET_NAME}")
+print(f"-----------------------")
 
 def get_s3_client():
     """
@@ -52,7 +58,7 @@ async def upload_file_bytes_to_s3(file_bytes: bytes, filename: str, content_type
             unique_filename,
             ExtraArgs={
                 "ContentType": content_type,
-                "ACL": "public-read" 
+                # "ACL": "public-read"  <-- REMOVED because bucket does not support ACLs
             }
         )
         
