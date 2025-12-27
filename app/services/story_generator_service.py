@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from PIL import Image
 import io
 import asyncio
+from typing import Tuple
 
 # Load environment variables
 load_dotenv()
@@ -24,20 +25,25 @@ def create_story_prompt(genre: str, tone: str, language: str) -> str:
     Creates a detailed prompt for the LLM based on user input.
     """
     prompt = (
-        f"Generate a short, engaging story in {language}. "
-        f"The story should be in the {genre} genre and have a {tone} tone. "
-        "The story should be inspired by the accompanying image. "
-        "Describe the scene and characters vividly. Do not add any titles or headers."
+        f"Write a short, engaging story in {language}. "
+        f"The genre is {genre} and the tone is {tone}. "
+        "Use the accompanying image ONLY to establish the SETTING and LOCATION of the story. "
+        "Do not describe the image directly. Instead, let the story unfold naturally within that environment. "
+        "First, provide a unique, creative, and catchy title for the story on the very first line. "
+        "Then, start the story on a new line. "
+        "Format:\n"
+        "Title: [Your Creative Title]\n"
+        "[Story Content]"
     )
     return prompt
 
 async def generate_story_from_image_bytes_and_prompt(
     image_bytes: bytes, 
     prompt: str
-) -> str:
+) -> Tuple[str, str]:
     """
     Processes image bytes, sends it to the Gemini API with a prompt,
-    and returns the generated story. Handles rate limits with retries.
+    and returns a tuple of (title, story_content).
     """
     try:
         # Open the image using Pillow to ensure it's a valid image
@@ -54,7 +60,26 @@ async def generate_story_from_image_bytes_and_prompt(
             try:
                 # Generate content using the Gemini API
                 response = await model.generate_content_async([prompt, img])
-                return response.text
+                full_text = response.text
+                
+                # Parse the response to separate Title and Content
+                lines = full_text.strip().split('\n')
+                title = "Untitled Story"
+                story_content = full_text
+
+                if lines:
+                    first_line = lines[0].strip()
+                    if first_line.lower().startswith("title:"):
+                        title = first_line[6:].strip() # Remove "Title:" prefix
+                        story_content = "\n".join(lines[1:]).strip()
+                    else:
+                        # If the model didn't follow format strictly, try to use the first line as title
+                        # if it's short enough
+                        if len(first_line) < 100:
+                            title = first_line
+                            story_content = "\n".join(lines[1:]).strip()
+                
+                return title, story_content
             
             except google_exceptions.ResourceExhausted:
                 # If we hit a rate limit, wait and try again

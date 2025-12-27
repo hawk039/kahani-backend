@@ -9,9 +9,9 @@ from app.schemas.user_schema import UserResponse
 from app.core.validators import validate_story_input
 from app.services.story_generator_service import (
     create_story_prompt,
-    generate_story_from_image_bytes_and_prompt, # Updated import
+    generate_story_from_image_bytes_and_prompt,
 )
-from app.core.s3_service import upload_file_bytes_to_s3 # Updated import
+from app.core.s3_service import upload_file_bytes_to_s3
 from app.models.story import Story
 
 router = APIRouter(prefix="/generate-story", tags=["Generate Story"])
@@ -33,8 +33,8 @@ async def generate_story_endpoint(
 ):
     """
     Receives an image and story metadata, validates them,
-    uploads the image to S3, creates a prompt, generates a story, 
-    saves it to the DB, and returns the saved record with the S3 URL.
+    uploads the image to S3, creates a prompt, generates a story with a title, 
+    saves it to the DB, and returns the saved record.
     """
     # 1. Data is already validated by the `validate_story_input` dependency.
     file = validated_data["file"]
@@ -52,16 +52,18 @@ async def generate_story_endpoint(
     prompt = create_story_prompt(genre, tone, language)
 
     # 4. Generate the story using the service using the bytes
-    story_text = await generate_story_from_image_bytes_and_prompt(file_bytes, prompt)
+    # Now returns a tuple: (title, story_text)
+    title, story_text = await generate_story_from_image_bytes_and_prompt(file_bytes, prompt)
 
     # 5. Save to Database
     new_story = Story(
         user_id=current_user.id,
+        title=title, # Save the generated title
         content=story_text,
         genre=genre,
         tone=tone,
         language=language,
-        image_filename=image_url # Storing the full S3 URL here
+        image_filename=image_url
     )
     db.add(new_story)
     db.commit()
@@ -72,6 +74,7 @@ async def generate_story_endpoint(
         "statusCode": 200,
         "id": new_story.id,
         "createdAt": new_story.created_at.isoformat(),
+        "title": new_story.title, # Return the title
         "story": new_story.content,
         "metadata": {
             "genre": new_story.genre,
