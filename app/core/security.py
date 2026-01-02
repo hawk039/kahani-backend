@@ -33,6 +33,13 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Verifies a plain password against a hashed one.
+    Returns False if hashed_password is None (e.g., Google auth users).
+    """
+    if hashed_password is None:
+        return False
+        
     password_bytes = plain_password.encode('utf-8')
     hashed_password_bytes = hashed_password.encode('utf-8')
     return bcrypt.checkpw(password_bytes, hashed_password_bytes)
