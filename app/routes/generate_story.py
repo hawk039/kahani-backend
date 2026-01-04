@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from typing import Dict
+from sqlalchemy import or_, desc
+from typing import Dict, Optional
 from datetime import datetime
 
 from app.db.database import SessionLocal
@@ -83,4 +84,63 @@ async def generate_story_endpoint(
             "image_url": new_story.image_filename,
         },
         "user": current_user.email
+    }
+
+@router.get("/my-stories")
+def get_my_stories(
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(10, ge=1, le=100, description="Items per page"),
+    search: Optional[str] = Query(None, description="Search term for title or content"),
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    Fetches paginated stories for the current user with optional search.
+    """
+    # Base query: filter by current user
+    query = db.query(Story).filter(Story.user_id == current_user.id)
+
+    # Apply search filter if provided
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Story.title.ilike(search_term),
+                Story.content.ilike(search_term),
+                Story.genre.ilike(search_term)
+            )
+        )
+
+    # Get total count before pagination
+    total_stories = query.count()
+
+    # Apply pagination and sorting (newest first)
+    offset = (page - 1) * limit
+    stories = query.order_by(desc(Story.created_at)).offset(offset).limit(limit).all()
+
+    # Format the response
+    data = []
+    for story in stories:
+        data.append({
+            "id": story.id,
+            "title": story.title,
+            "story": story.content,
+            "createdAt": story.created_at.isoformat(),
+            "metadata": {
+                "genre": story.genre,
+                "tone": story.tone,
+                "language": story.language,
+                "image_url": story.image_filename,
+            }
+        })
+
+    return {
+        "statusCode": 200,
+        "data": data,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total_stories,
+            "totalPages": (total_stories + limit - 1) // limit
+        }
     }
