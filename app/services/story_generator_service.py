@@ -7,6 +7,7 @@ from PIL import Image
 import io
 import asyncio
 from typing import Tuple
+import re
 
 # Load environment variables
 load_dotenv()
@@ -26,17 +27,17 @@ def create_story_prompt(genre: str, tone: str, language: str) -> str:
     Creates a detailed prompt for the LLM based on user input.
     """
     prompt = (
-        f"Analyze the uploaded image as the true setting and mood of the story. "
-        f"Write a Hollywood-level story in {language}. "
+        f"Analyze the uploaded image to establish the setting and atmosphere of the story. "
+        f"Write a high-quality, immersive story in {language}. "
         f"Genre: {genre}. Tone: {tone}.\n\n"
         "Guidelines:\n"
-        "1. Open with an immediate cinematic hook.\n"
-        "2. Create a flawed, compelling protagonist whose inner conflict mirrors the image.\n"
-        "3. Let the environment actively shape the story.\n"
-        "4. Use visual storytelling, tight pacing, and subtext-driven dialogue.\n"
-        "5. Avoid clichés and exposition.\n"
-        "6. Build toward a high-stakes irreversible choice.\n"
-        "7. End with a powerful, lingering final moment that feels film-worthy.\n\n"
+        "1. Open with a gripping hook that immediately pulls the reader into the scene.\n"
+        "2. Create a compelling protagonist whose emotions resonate with the setting.\n"
+        "3. Use the environment to build atmosphere and mood, describing sights, sounds, and feelings vividly.\n"
+        "4. Focus on narrative flow and character depth. Do NOT use camera angles, script directions, or technical film jargon.\n"
+        "5. Keep the pacing tight and the dialogue natural.\n"
+        "6. Build toward a high-stakes moment or realization.\n"
+        "7. End with a powerful, resonant conclusion.\n\n"
         "Format:\n"
         "Title: [Your Creative Title]\n"
         "[Story Content]"
@@ -76,14 +77,20 @@ async def generate_story_from_image_bytes_and_prompt(
 
                 if lines:
                     first_line = lines[0].strip()
-                    if first_line.lower().startswith("title:"):
-                        title = first_line[6:].strip()  # Remove "Title:" prefix
+                    
+                    # Check if the first line looks like a title
+                    if first_line.lower().startswith("title:") or "**title:" in first_line.lower():
+                        # Remove "Title:" prefix (case insensitive)
+                        title = re.sub(r'(?i)^[\*]*title:[\*]*', '', first_line).strip()
+                        # Remove any remaining bold markers
+                        title = title.replace('**', '').strip()
+                        
                         story_content = "\n".join(lines[1:]).strip()
                     else:
                         # If the model didn't follow format strictly, try to use the first line as title
                         # if it's short enough
                         if len(first_line) < 100:
-                            title = first_line
+                            title = first_line.replace('**', '').strip()
                             story_content = "\n".join(lines[1:]).strip()
 
                 return title, story_content
