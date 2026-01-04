@@ -20,26 +20,33 @@ genai.configure(api_key=GEMINI_API_KEY)
 # Initialize the Gemini model
 model = genai.GenerativeModel('gemini-flash-latest')
 
+
 def create_story_prompt(genre: str, tone: str, language: str) -> str:
     """
     Creates a detailed prompt for the LLM based on user input.
     """
     prompt = (
-        f"Write a short, engaging story in {language}. "
-        f"The genre is {genre} and the tone is {tone}. "
-        "Use the accompanying image ONLY to establish the SETTING and LOCATION of the story. "
-        "Do not describe the image directly. Instead, let the story unfold naturally within that environment. "
-        "First, provide a unique, creative, and catchy title for the story on the very first line. "
-        "Then, start the story on a new line. "
+        f"Analyze the uploaded image as the true setting and mood of the story. "
+        f"Write a Hollywood-level story in {language}. "
+        f"Genre: {genre}. Tone: {tone}.\n\n"
+        "Guidelines:\n"
+        "1. Open with an immediate cinematic hook.\n"
+        "2. Create a flawed, compelling protagonist whose inner conflict mirrors the image.\n"
+        "3. Let the environment actively shape the story.\n"
+        "4. Use visual storytelling, tight pacing, and subtext-driven dialogue.\n"
+        "5. Avoid clichés and exposition.\n"
+        "6. Build toward a high-stakes irreversible choice.\n"
+        "7. End with a powerful, lingering final moment that feels film-worthy.\n\n"
         "Format:\n"
         "Title: [Your Creative Title]\n"
         "[Story Content]"
     )
     return prompt
 
+
 async def generate_story_from_image_bytes_and_prompt(
-    image_bytes: bytes, 
-    prompt: str
+        image_bytes: bytes,
+        prompt: str
 ) -> Tuple[str, str]:
     """
     Processes image bytes, sends it to the Gemini API with a prompt,
@@ -61,7 +68,7 @@ async def generate_story_from_image_bytes_and_prompt(
                 # Generate content using the Gemini API
                 response = await model.generate_content_async([prompt, img])
                 full_text = response.text
-                
+
                 # Parse the response to separate Title and Content
                 lines = full_text.strip().split('\n')
                 title = "Untitled Story"
@@ -70,7 +77,7 @@ async def generate_story_from_image_bytes_and_prompt(
                 if lines:
                     first_line = lines[0].strip()
                     if first_line.lower().startswith("title:"):
-                        title = first_line[6:].strip() # Remove "Title:" prefix
+                        title = first_line[6:].strip()  # Remove "Title:" prefix
                         story_content = "\n".join(lines[1:]).strip()
                     else:
                         # If the model didn't follow format strictly, try to use the first line as title
@@ -78,24 +85,28 @@ async def generate_story_from_image_bytes_and_prompt(
                         if len(first_line) < 100:
                             title = first_line
                             story_content = "\n".join(lines[1:]).strip()
-                
+
                 return title, story_content
-            
+
             except google_exceptions.ResourceExhausted:
                 # If we hit a rate limit, wait and try again
                 if attempt < max_retries - 1:
-                    wait_time = base_delay * (2 ** attempt) # Exponential backoff: 2s, 4s, 8s
+                    wait_time = base_delay * (2 ** attempt)  # Exponential backoff: 2s, 4s, 8s
                     print(f"Rate limit hit. Retrying in {wait_time} seconds...")
                     await asyncio.sleep(wait_time)
                 else:
                     # If we run out of retries, raise a specific 429 error
                     raise HTTPException(
-                        status_code=429, 
+                        status_code=429,
                         detail="Service is busy (Rate Limit Exceeded). Please try again later."
                     )
             except Exception as e:
                 # Re-raise other exceptions immediately
                 raise e
+        
+        # This part is unreachable due to the loop logic raising exceptions,
+        # but we add a return to satisfy static analysis tools.
+        raise HTTPException(status_code=500, detail="Failed to generate story after retries.")
 
     except HTTPException as he:
         raise he
