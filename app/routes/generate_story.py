@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, desc
 from typing import Dict, Optional
@@ -7,6 +7,7 @@ from datetime import datetime
 from app.db.database import SessionLocal
 from app.core.security import get_current_user
 from app.schemas.user_schema import UserResponse
+from app.schemas.story_schema import StoryUpdateRequest  # Import the new schema
 from app.core.validators import validate_story_input
 from app.services.story_generator_service import (
     create_story_prompt,
@@ -28,9 +29,9 @@ def get_db():
 
 @router.post("/generate")
 async def generate_story_endpoint(
-    validated_data: Dict = Depends(validate_story_input),
-    db: Session = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+        validated_data: Dict = Depends(validate_story_input),
+        db: Session = Depends(get_db),
+        current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Receives an image and story metadata, validates them,
@@ -59,7 +60,7 @@ async def generate_story_endpoint(
     # 5. Save to Database
     new_story = Story(
         user_id=current_user.id,
-        title=title, # Save the generated title
+        title=title,  # Save the generated title
         content=story_text,
         genre=genre,
         tone=tone,
@@ -75,7 +76,7 @@ async def generate_story_endpoint(
         "statusCode": 200,
         "id": new_story.id,
         "createdAt": new_story.created_at.isoformat(),
-        "title": new_story.title, # Return the title
+        "title": new_story.title,  # Return the title
         "story": new_story.content,
         "metadata": {
             "genre": new_story.genre,
@@ -86,13 +87,14 @@ async def generate_story_endpoint(
         "user": current_user.email
     }
 
+
 @router.get("/my-stories")
 def get_my_stories(
-    page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(10, ge=1, le=100, description="Items per page"),
-    search: Optional[str] = Query(None, description="Search term for title or content"),
-    db: Session = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+        page: int = Query(1, ge=1, description="Page number"),
+        limit: int = Query(10, ge=1, le=100, description="Items per page"),
+        search: Optional[str] = Query(None, description="Search term for title or content"),
+        db: Session = Depends(get_db),
+        current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Fetches paginated stories for the current user with optional search.
@@ -142,5 +144,57 @@ def get_my_stories(
             "limit": limit,
             "total": total_stories,
             "totalPages": (total_stories + limit - 1) // limit
+        }
+    }
+
+
+@router.put("/update/{story_id}")
+def update_story(
+        story_id: int,
+        update_data: StoryUpdateRequest,
+        db: Session = Depends(get_db),
+        current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    Updates the title or content of a story.
+    Only the owner of the story can update it.
+    """
+    # 1. Find the story
+    story = db.query(Story).filter(Story.id == story_id).first()
+
+    # 2. Check if story exists
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    # 3. Check ownership
+    if story.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this story")
+
+    # 4. Apply updates
+    if update_data.title:
+        story.title = update_data.title
+
+    if update_data.story:
+        story.content = update_data.story
+
+    # 5. Save changes
+    db.commit()
+    db.refresh(story)
+
+    # 6. Return updated story
+    return {
+        "statusCode": 200,
+        "message": "Story updated successfully",
+        "data": {
+            "id": story.id,
+            "title": story.title,
+            "story": story.content,
+            "updatedAt": datetime.utcnow().isoformat(),
+            "metadata": {
+                "genre": story.genre,
+                "tone": story.tone,
+                "language": story.language,
+                "image_url": story.image_filename,
+            }
         }
     }
