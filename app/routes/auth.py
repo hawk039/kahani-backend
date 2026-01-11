@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -15,6 +15,8 @@ from app.core.security import (
     oauth2_scheme,
 )
 from app.services.token_blacklist_service import blacklist_token
+from app.core.s3_service import upload_file_bytes_to_s3
+from app.models.user import User # Import User model
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 
@@ -179,3 +181,53 @@ def google_signin(user: GoogleUserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid Firebase token")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# -------------------------
+# Update Avatar
+# -------------------------
+@router.put("/update-avatar")
+async def update_avatar(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Updates the current user's avatar.
+    Uploads the image to S3 and saves the URL to the database.
+    """
+    # Validate file type
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
+
+    try:
+        # Read file bytes
+        file_bytes = await file.read()
+        
+        # Upload to S3
+        avatar_url = await upload_file_bytes_to_s3(file_bytes, file.filename, file.content_type)
+        
+        # Re-fetch user from the current session to ensure persistence
+        user_to_update = db.query(User).filter(User.id == current_user.id).first()
+        
+        if not user_to_update:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Update user record
+        user_to_update.avatar_url = avatar_url
+        db.commit()
+        db.refresh(user_to_update)
+        
+        return {
+            "statusCode": 200,
+            "message": "Avatar updated successfully",
+            "user": {
+                "id": user_to_update.id,
+                "email": user_to_update.email,
+                "avatar_url": user_to_update.avatar_url
+            }
+        }
+        
+    except Exception as e:
+        # Print error for debugging
+        print(f"Error updating avatar: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update avatar: {str(e)}")

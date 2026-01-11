@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -12,6 +13,7 @@ class ForgetPassword(BaseModel):
 class UserResponse(BaseModel):
     id: int
     email: EmailStr
+    avatar_url: Optional[str] = None # Added field
 
     class Config:
         from_attributes = True
